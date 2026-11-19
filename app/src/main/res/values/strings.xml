@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bangla Live Subtitles</string>
+    <string name="app_tagline">Voov কলের জাপানি কথা বাংলায় দেখো — ফোনের অডিও থেকে, মাইক ছাড়াই। ফ্রি, কোনো অ্যাকাউন্ট নেই, কোনো বিজ্ঞাপন নেই।</string>
+    <string name="mode_label">শোনার মাধ্যম</string>
+    <string name="mode_phone_audio">ফোন অডিও (Voov কলের আওয়াজ — মাইক লাগবে না)</string>
+    <string name="mode_mic">মাইক্রোফোন (স্পিকারের আওয়াজ শুনবে)</string>
+    <string name="source_label">মূল ভাষা (যা বলা হচ্ছে)</string>
+    <string name="target_label">অনুবাদের ভাষা</string>
+    <string name="size_label">লেখার সাইজ: 20sp</string>
+    <string name="model_needed">ফোন অডিও মোডের জন্য জাপানি মডেল (প্রায় 48 MB) একবার ডাউনলোড করতে হবে।</string>
+    <string name="model_download">জাপানি মডেল ডাউনলোড করো (48 MB)</string>
+    <string name="start">শুরু করো</string>
+    <string name="status_idle">বন্ধ আছে</string>
+    <string name="notes">জেনে রাখো:\n• ফোন অডিও মোডে Voov কলের আওয়াজ সরাসরি ধরা হয় — মাইক ব্যবহার হয় না।\n• কিছু অ্যাপ তাদের অডিও ধরা বন্ধ করে রাখে — Voov সেটা করে কিনা, ফোনে টেস্ট করলেই বোঝা যাবে। না ধরলে মাইক মোড ব্যবহার করো।\n• অনুবাদ ফ্রি সার্ভিস দিয়ে হয় — মাঝে মাঝে দেরি হতে পারে বা লিমিট শেষ হতে পারে।\n• সাবটাইটেল বাক্সটা টেনে যেকোনো জায়গায় সরানো যায়।</string>
+
+    <string-array name="source_languages">
+        <item>Japanese</item>
+        <item>English</item>
+    </string-array>
+    <string-array name="source_language_codes">
+        <item>ja</item>
+        <item>en</item>
+    </string-array>
+    <string-array name="target_languages">
+        <item>Bengali</item>
+        <item>English</item>
+        <item>Japanese</item>
+    </string-array>
+    <string-array name="target_language_codes">
+        <item>bn</item>
+        <item>en</item>
+        <item>ja</item>
+    </string-array>
+</resources>
