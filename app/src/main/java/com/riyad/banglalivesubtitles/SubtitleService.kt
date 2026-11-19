@@ -100,12 +100,22 @@ class SubtitleService : Service() {
     // Microphone recognition
     private var speechRecognizer: SpeechRecognizer? = null
     private var micRetries = 0
+    // True while a recognition session is active. startListening() while a
+    // session is already running fails with ERROR_CLIENT, so every restart
+    // goes through this flag and only ONE callback restarts listening.
+    private var micListening = false
+
+    // Translation throttle: the free translate endpoint rate-limits rapid
+    // requests, so partial results translate at most once per 2s and
+    // identical text is never sent twice. Final results always translate.
+    private var lastTranslateAt = 0L
+    private var lastTranslatedText = ""
 
     // Debounced translation of partial results
     private var lastPartialText = ""
     private val translatePartialRunnable = Runnable {
         if (running && lastPartialText.isNotBlank()) {
-            translateAndShow(lastPartialText)
+            translateAndShow(lastPartialText, isFinal = false)
         }
     }
 
@@ -357,6 +367,7 @@ class SubtitleService : Service() {
 
     private fun startMicMode() {
         micRetries = 0
+        micListening = false
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             showToast("এই ফোনে Google speech recognition পাওয়া যায়নি")
             stopSelf()
@@ -392,7 +403,7 @@ class SubtitleService : Service() {
     }
 
     private fun startListeningMic() {
-        if (!running) return
+        if (!running || micListening) return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -403,14 +414,17 @@ class SubtitleService : Service() {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
         try {
+            micListening = true
             speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
+            micListening = false
             showToast("মাইক চালু হয়নি: ${e.message}")
             stopSelf()
         }
     }
 
     private fun stopMicMode() {
+        micListening = false
         try {
             speechRecognizer?.cancel()
         } catch (e: Exception) {
@@ -431,12 +445,15 @@ class SubtitleService : Service() {
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {
-            // Keep listening continuously.
-            mainHandler.postDelayed({ startListeningMic() }, 150)
+            // Do NOT restart here: onResults (success) or onError (no match)
+            // always follows, and restarting from both places fires
+            // startListening twice, which kills the session with ERROR_CLIENT.
+            micListening = false
         }
 
         override fun onError(error: Int) {
             if (!running) return
+            micListening = false
             when (error) {
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     showToast("মাইক অনুমতি দরকার")
@@ -460,6 +477,7 @@ class SubtitleService : Service() {
 
         override fun onResults(results: Bundle?) {
             micRetries = 0
+            micListening = false
             val text = results
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
@@ -502,7 +520,15 @@ class SubtitleService : Service() {
         translateAndShow(text)
     }
 
-    private fun translateAndShow(text: String) {
+    private fun translateAndShow(text: String, isFinal: Boolean = true) {
+        // Skip duplicates and throttle partials: the free endpoint
+        // rate-limits rapid requests, which is what stopped translation
+        // after the first 1-2 lines. Finals always go through.
+        if (text == lastTranslatedText) return
+        val now = System.currentTimeMillis()
+        if (!isFinal && now - lastTranslateAt < 2000) return
+        lastTranslatedText = text
+        lastTranslateAt = now
         val from = sourceLang
         val to = targetLang
         translateExecutor.execute {
