@@ -60,6 +60,9 @@ class SubtitleService : Service() {
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
 
+        const val ACTION_SERVICE_STOPPED = "com.riyad.banglalivesubtitles.SERVICE_STOPPED"
+        const val EXTRA_ERROR = "error"
+
         const val MODE_PHONE_AUDIO = "phone_audio"
         const val MODE_MIC = "mic"
 
@@ -72,6 +75,7 @@ class SubtitleService : Service() {
     private val translateExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     private var running = false
+    private var stopError: String? = null
     private var mode = MODE_PHONE_AUDIO
     private var sourceLang = "ja"
     private var targetLang = "bn"
@@ -126,6 +130,7 @@ class SubtitleService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification(), serviceType)
 
         running = true
+        stopError = null
         addOverlay()
 
         if (mode == MODE_PHONE_AUDIO) {
@@ -151,6 +156,7 @@ class SubtitleService : Service() {
         removeOverlay()
         translateExecutor.shutdownNow()
         stopForeground(true)
+        sendBroadcast(Intent(ACTION_SERVICE_STOPPED).putExtra(EXTRA_ERROR, stopError))
         super.onDestroy()
     }
 
@@ -228,9 +234,12 @@ class SubtitleService : Service() {
                     getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
 
+                // Only USAGE_MEDIA, USAGE_GAME and USAGE_UNKNOWN can be
+                // captured (Android docs). Voice-call audio
+                // (USAGE_VOICE_COMMUNICATION) is NOT capturable, and asking
+                // for it makes the audio policy registration fail.
                 val config = AudioPlaybackCaptureConfiguration.Builder(mediaProjection!!)
                     .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                    .addMatchingUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                     .addMatchingUsage(AudioAttributes.USAGE_GAME)
                     .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                     .build()
@@ -281,8 +290,14 @@ class SubtitleService : Service() {
                     }
                 }
             } catch (e: Exception) {
+                val friendly = if (e.message?.contains("audio policy", ignoreCase = true) == true) {
+                    "ফোন অডিও চালু হয়নি — অডিও অনুমতি দাওনি বা এই ফোন সাপোর্ট করে না। মাইক্রোফোন মোড try করো।"
+                } else {
+                    "ফোন অডিও চালু হয়নি: ${e.message}"
+                }
+                stopError = friendly
                 mainHandler.post {
-                    showToast("ফোন অডিও চালু হয়নি: ${e.message}")
+                    showToast(friendly)
                     stopSelf()
                 }
             }
