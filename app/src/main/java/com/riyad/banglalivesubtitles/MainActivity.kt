@@ -1,7 +1,10 @@
 package com.riyad.banglalivesubtitles
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -43,6 +46,16 @@ class MainActivity : AppCompatActivity() {
 
     private var running = false
     private var pendingMicStart = false
+    private var pendingPhoneAudioStart = false
+
+    private val serviceStoppedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            running = false
+            startStopButton.text = "শুরু করো"
+            val error = intent?.getStringExtra(SubtitleService.EXTRA_ERROR)
+            statusText.text = error ?: "বন্ধ আছে"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +79,22 @@ class MainActivity : AppCompatActivity() {
         modelDownloadButton.setOnClickListener { downloadModel() }
         startStopButton.setOnClickListener { onStartStopClicked() }
 
+        ContextCompat.registerReceiver(
+            this,
+            serviceStoppedReceiver,
+            IntentFilter(SubtitleService.ACTION_SERVICE_STOPPED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
         refreshModelSection()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(serviceStoppedReceiver)
+        } catch (e: Exception) {
+        }
     }
 
     override fun onResume() {
@@ -213,6 +241,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startPhoneAudioMode() {
+        // AudioPlaybackCapture needs RECORD_AUDIO at runtime (Android docs:
+        // "To be able to capture audio, an app must have the RECORD_AUDIO
+        // permission"). Without it, AudioRecord fails to register its audio
+        // policy: "Error: could not register audio policy".
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingPhoneAudioStart = true
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_AUDIO
+            )
+            return
+        }
         if (sourceCode() != "ja") {
             sourceSpinner.setSelection(0)
             Toast.makeText(
@@ -302,13 +345,17 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_AUDIO) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (pendingMicStart) {
+                if (pendingPhoneAudioStart) {
+                    pendingPhoneAudioStart = false
+                    startPhoneAudioMode()
+                } else if (pendingMicStart) {
                     pendingMicStart = false
                     startSubtitleService(null, null)
                 }
             } else {
                 pendingMicStart = false
-                Toast.makeText(this, "মাইক অনুমতি ছাড়া মাইক মোড চলবে না", Toast.LENGTH_LONG).show()
+                pendingPhoneAudioStart = false
+                Toast.makeText(this, "অডিও অনুমতি ছাড়া এই মোড চলবে না", Toast.LENGTH_LONG).show()
             }
         }
     }
