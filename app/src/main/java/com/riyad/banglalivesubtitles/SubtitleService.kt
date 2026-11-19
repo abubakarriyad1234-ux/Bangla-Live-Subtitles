@@ -63,6 +63,8 @@ class SubtitleService : Service() {
         const val ACTION_SERVICE_STOPPED = "com.riyad.banglalivesubtitles.SERVICE_STOPPED"
         const val EXTRA_ERROR = "error"
 
+        private const val MAX_MIC_RETRIES = 5
+
         const val MODE_PHONE_AUDIO = "phone_audio"
         const val MODE_MIC = "mic"
 
@@ -97,6 +99,7 @@ class SubtitleService : Service() {
 
     // Microphone recognition
     private var speechRecognizer: SpeechRecognizer? = null
+    private var micRetries = 0
 
     // Debounced translation of partial results
     private var lastPartialText = ""
@@ -353,6 +356,7 @@ class SubtitleService : Service() {
     // ------------------------------------------------------------ mic mode
 
     private fun startMicMode() {
+        micRetries = 0
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             showToast("এই ফোনে Google speech recognition পাওয়া যায়নি")
             stopSelf()
@@ -362,6 +366,29 @@ class SubtitleService : Service() {
             setRecognitionListener(micListener)
         }
         startListeningMic()
+    }
+
+    /**
+     * ERROR_CLIENT is NOT a permission problem — the recognizer itself failed
+     * to start (often because another app, e.g. a Voov call, is holding the
+     * mic, or the recognizer service hiccuped on a cold start). Recreate the
+     * recognizer and retry a few times instead of stopping at once.
+     */
+    private fun retryMicWithFreshRecognizer() {
+        if (!running) return
+        micRetries++
+        if (micRetries > MAX_MIC_RETRIES) {
+            val msg = "মাইক চালু হলো না — Voov call চলাকালীন মাইক ব্যস্ত থাকলে এমন হয়। কল স্পিকারে দিয়ে আবার try করো।"
+            stopError = msg
+            showToast(msg)
+            stopSelf()
+            return
+        }
+        mainHandler.postDelayed({
+            if (!running) return@postDelayed
+            stopMicMode()
+            startMicMode()
+        }, 600)
     }
 
     private fun startListeningMic() {
@@ -411,10 +438,12 @@ class SubtitleService : Service() {
         override fun onError(error: Int) {
             if (!running) return
             when (error) {
-                SpeechRecognizer.ERROR_CLIENT,
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     showToast("মাইক অনুমতি দরকার")
                     stopSelf()
+                }
+                SpeechRecognizer.ERROR_CLIENT -> {
+                    retryMicWithFreshRecognizer()
                 }
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
                     mainHandler.postDelayed({
@@ -430,6 +459,7 @@ class SubtitleService : Service() {
         }
 
         override fun onResults(results: Bundle?) {
+            micRetries = 0
             val text = results
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
