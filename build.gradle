@@ -1,0 +1,7 @@
+// Top-level build file for Bangla Live Subtitles.
+// Original code, written from scratch. No code, name, branding or assets
+// copied from any other app.
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}
